@@ -144,4 +144,24 @@ public class ContentControllerTests
         var expectedGenres = originalContent.GenreList.Except(mockRequest);
         Assert.Equal(expectedGenres, updatedContent.GenreList); // Chek if genres are what is expected
     }
+
+    [Fact]
+    public async Task GetFilteredContents_ReturnsOkResult()
+    {
+        var responseId = Guid.NewGuid();
+
+        var allContents = MockData.MockGetFilteredContentsAllContents(responseId);
+        var titleFilter = MockData.MockGetFilteredContentsTitleFilter;
+        var genreFilter = MockData.MockGetFilteredContentsGenreFilter;
+        var expectedResponse = MockData.MockGetFilteredContentsResponse(responseId);
+        _mockManager.Setup(manager => manager.GetManyContents()).ReturnsAsync(allContents);
+
+        var result = await _controller.GetFilteredContents(titleFilter, genreFilter, true);
+
+        Assert.IsType<OkObjectResult>(result);
+        var contentResult = (result as OkObjectResult)?.Value as IEnumerable<Content?>;
+        Assert.NotNull(contentResult);
+        Assert.NotEmpty(contentResult);
+        Assert.Equal(expectedResponse.ElementAt(0).Id, contentResult.ToList().ElementAt(0).Id);
+    }
 }

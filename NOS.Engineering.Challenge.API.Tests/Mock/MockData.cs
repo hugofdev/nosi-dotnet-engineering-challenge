@@ -188,4 +188,64 @@ public class MockData
             endTime: DateTime.UtcNow.AddHours(1),
             genreList: new List<string> { "Genre1", "Genre2" });
     }
+
+
+    public static IEnumerable<Content?> MockGetFilteredContentsAllContents(Guid responseId)
+    {
+        return new List<Content?>()
+        {
+            new Content(
+                id: Guid.NewGuid(),
+                title: "MC1_Title",
+                subTitle: "MC1_SubTitle",
+                description: "MC1_Description",
+                imageUrl: "MC1_Url",
+                duration: 60,
+                startTime: DateTime.UtcNow,
+                endTime: DateTime.UtcNow.AddHours(1),
+                genreList: new List<string> { "Genre1", "Genre2" }),
+
+            new Content(
+                id: responseId,
+                title: "MC2_Title",
+                subTitle: "MC2_SubTitle",
+                description: "MC2_Description",
+                imageUrl: "MC2_Url",
+                duration: 90,
+                startTime: DateTime.UtcNow,
+                endTime: DateTime.UtcNow.AddHours(1.5),
+                genreList: new List<string> { "Genre2", "Genre3" }),
+
+            new Content(
+                id: Guid.NewGuid(),
+                title: "MC3_Title",
+                subTitle: "MC3_SubTitle",
+                description: "MC3_Description",
+                imageUrl: "MC3_Url",
+                duration: 120,
+                startTime: DateTime.UtcNow,
+                endTime: DateTime.UtcNow.AddHours(2),
+                genreList: new List<string> { "Genre3", "Genre4" })
+        };
+    }
+
+    public static readonly string MockGetFilteredContentsTitleFilter = "MC2";
+    public static readonly string MockGetFilteredContentsGenreFilter = "Genre3";
+
+    public static IEnumerable<Content?> MockGetFilteredContentsResponse(Guid id)
+    {
+        return new List<Content?>()
+        {
+            new Content(
+                id: id,
+                title: "MC2_Title",
+                subTitle: "MC2_SubTitle",
+                description: "MC2_Description",
+                imageUrl: "MC2_Url",
+                duration: 90,
+                startTime: DateTime.UtcNow,
+                endTime: DateTime.UtcNow.AddHours(1.5),
+                genreList: new List<string> { "Genre2", "Genre3" })
+        };
+    }
 }

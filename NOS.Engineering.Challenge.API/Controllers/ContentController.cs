@@ -24,7 +24,8 @@ public class ContentController : Controller
         _logger = logger;
         _cache = cache;
     }
-    
+
+    [Obsolete("This endpoint is obsolete. Please use the new GetFilteredContents endpoint instead.")]
     [HttpGet]
     public async Task<IActionResult> GetManyContents(bool bypassCaching = false)
     {
@@ -327,5 +328,71 @@ public class ContentController : Controller
             _logger.LogError(e, $"[DELETE] {nameof(RemoveGenres)}: An unexpected error has occurred.");
             return StatusCode(500);
         }
+    }
+
+    [HttpGet("filter")]
+    public async Task<IActionResult> GetFilteredContents(
+        string title = "",
+        string genre = "",
+        bool bypassCaching = false
+    )
+    {
+        _logger.LogInformation($"[GET] {nameof(GetFilteredContents)}: " +
+            $"Attempting to retrieve list of filtered movies.");
+
+        var cacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", "Filter" , $"{title}", $"{genre}" });
+        IEnumerable<Content?> searchMatches;
+
+        try
+        {
+            if (!_cache.TryGetValue(cacheKey, out searchMatches))
+            {
+                var allContents = await _manager.GetManyContents().ConfigureAwait(false);
+
+                if (!allContents.Any())
+                {
+                    _logger.LogInformation($"[GET] {nameof(GetFilteredContents)}: No movies could be found.");
+                    return NotFound();
+                }
+
+                if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(genre))
+                {
+                    searchMatches = allContents;
+                }
+                else if (string.IsNullOrEmpty(title))
+                {
+                    searchMatches = allContents.Where(content => content.GenreList.Contains(genre));
+                }
+                else if (string.IsNullOrEmpty(genre))
+                {
+                    searchMatches = allContents.Where(content => content.Title.ToLower().Contains(title.ToLower()));
+                }
+                else
+                {
+                    searchMatches = allContents
+                      .Where(content => content.Title.ToLower().Contains(title.ToLower()))
+                      .Where(content => content.GenreList.Contains(genre));
+                }
+
+                if (!searchMatches.Any())
+                {
+                    _logger.LogInformation($"[GET] {nameof(GetFilteredContents)}: No content matched the search filters.");
+                    return NotFound();
+                }
+
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(15));
+                if (!bypassCaching) _cache.Set(cacheKey, searchMatches, cacheEntryOptions);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, $"[GET] {nameof(GetFilteredContents)}: An unexpected error has occurred.");
+            return StatusCode(500);
+        }
+
+        _logger.LogInformation($"[GET] {nameof(GetFilteredContents)}: " +
+            $"Successfully retrieved a total of {searchMatches.Count()} movies.");
+        return Ok(searchMatches);
     }
 }
