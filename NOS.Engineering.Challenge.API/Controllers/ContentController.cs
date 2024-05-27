@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using NOS.Engineering.Challenge.API.Extensions;
 using NOS.Engineering.Challenge.API.Models;
 using NOS.Engineering.Challenge.Managers;
 using NOS.Engineering.Challenge.Models;
@@ -11,13 +13,16 @@ public class ContentController : Controller
 {
     private readonly IContentsManager _manager;
     private readonly ILogger<ContentController> _logger;
+    private readonly IMemoryCache _cache;
 
     public ContentController(
         IContentsManager manager,
-        ILogger<ContentController> logger)
+        ILogger<ContentController> logger,
+        IMemoryCache cache)
     {
         _manager = manager;
         _logger = logger;
+        _cache = cache;
     }
     
     [HttpGet]
@@ -26,24 +31,35 @@ public class ContentController : Controller
         _logger.LogInformation($"[GET] {nameof(GetManyContents)}: " +
             $"Attempting to retrieve all movies.");
 
+        var cacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", "All" });
+        IEnumerable<Content?> contents;
+
         try
         {
-            var contents = await _manager.GetManyContents().ConfigureAwait(false);
-            if (!contents.Any())
+            if (!_cache.TryGetValue(cacheKey, out contents))
             {
-                _logger.LogInformation($"[GET] {nameof(GetManyContents)}: No movies could be found.");
-                return NotFound();
-            }
+                contents = await _manager.GetManyContents().ConfigureAwait(false);
 
-            _logger.LogInformation($"[GET] {nameof(GetManyContents)}: " +
-                $"Successfully retrieved a total of {contents.Count()} movies.");
-            return Ok(contents);
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(15));
+                _cache.Set(cacheKey, contents, cacheEntryOptions);
+            }
         }
         catch (Exception e)
         {
             _logger.LogError(e, $"[GET] {nameof(GetManyContents)}: An unexpected error has occurred.");
             return StatusCode(500);
         }
+
+        if (!contents.Any())
+        {
+            _logger.LogInformation($"[GET] {nameof(GetManyContents)}: No movies could be found.");
+            return NotFound();
+        }
+
+        _logger.LogInformation($"[GET] {nameof(GetManyContents)}: " +
+            $"Successfully retrieved a total of {contents.Count()} movies.");
+        return Ok(contents);
     }
 
     [HttpGet("{id}")]
@@ -52,25 +68,36 @@ public class ContentController : Controller
         _logger.LogInformation($"[GET] {nameof(GetContent)}: " +
             $"Attempting to retrive movie with ID {id}.");
 
+        var cacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", id.ToString() });
+        Content? content;
+
         try
         {
-            var content = await _manager.GetContent(id).ConfigureAwait(false);
-            if (content == null)
+            if (!_cache.TryGetValue(cacheKey, out content))
             {
-                _logger.LogInformation($"[GET] {nameof(GetContent)}: " +
-                    $"Unable to find movie with ID '{id}'.");
-                return NotFound();
-            }
+                content = await _manager.GetContent(id).ConfigureAwait(false);
 
-            _logger.LogInformation($"[GET] {nameof(GetContent)}: " +
-                $"Successfully retrieved movie with ID '{id}'.");
-            return Ok(content);
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(15));
+                _cache.Set(cacheKey, content, cacheEntryOptions);
+            }
         }
         catch (Exception e)
         {
             _logger.LogError(e, $"[GET] {nameof(GetContent)}: An unexpected error has occurred.");
             return StatusCode(500);
         }
+
+        if (content == null)
+        {
+            _logger.LogInformation($"[GET] {nameof(GetContent)}: " +
+                $"Unable to find movie with ID '{id}'.");
+            return NotFound();
+        }
+
+        _logger.LogInformation($"[GET] {nameof(GetContent)}: " +
+            $"Successfully retrieved movie with ID '{id}'.");
+        return Ok(content);
     }
     
     [HttpPost]
@@ -90,6 +117,10 @@ public class ContentController : Controller
                     $"Failed to create movie with Title '{content.Title}'.");
                 return Problem();
             }
+
+            // When any content is added, updated or deleted, the cache with all movies must be reset
+            var allMoviesCacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", "All" });
+            _cache.Remove(allMoviesCacheKey);
 
             _logger.LogInformation($"[POST] {nameof(CreateContent)}: " +
                 $"Successfully created movie with Title '{content.Title}'.");
@@ -121,6 +152,14 @@ public class ContentController : Controller
                 return NotFound();
             }
 
+            // If content is updated, cache from that content becomes outdated, so it should be removed
+            var cacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", id.ToString() });
+            _cache.Remove(cacheKey);
+
+            // When any content is added, updated or deleted, the cache with all movies must be reset
+            var allMoviesCacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", "All" });
+            _cache.Remove(allMoviesCacheKey);
+
             _logger.LogInformation($"[PATCH] {nameof(UpdateContent)}: " +
                 $"Successfully updated content for movie with ID '{id}'.");
             return Ok(updatedContent);
@@ -149,6 +188,14 @@ public class ContentController : Controller
                     $"Failed to deleted movie with ID '{id}' because it could not be found.");
                 return NotFound();
             }
+
+            // If content is deleted, cache from that content should be removed
+            var cacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", id.ToString() });
+            _cache.Remove(cacheKey);
+
+            // When any content is added, updated or deleted, the cache with all movies must be reset
+            var allMoviesCacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", "All" });
+            _cache.Remove(allMoviesCacheKey);
 
             _logger.LogInformation($"[DELETE] {nameof(DeleteContent)}: " +
                 $"Successfully deleted movie with ID '{id}'.");
@@ -202,6 +249,14 @@ public class ContentController : Controller
 
             var updatedContent = await _manager.UpdateContent(id, updatedContentDto).ConfigureAwait(false);
 
+            // If content is updated, cache from that content becomes outdated, so it should be removed
+            var cacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", id.ToString() });
+            _cache.Remove(cacheKey);
+
+            // When any content is added, updated or deleted, the cache with all movies must be reset
+            var allMoviesCacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", "All" });
+            _cache.Remove(allMoviesCacheKey);
+
             _logger.LogInformation($"[POST] {nameof(AddGenres)}: " +
                 $"Successfully added [{string.Join(", ", newGenres)}] to movie with ID {id}.");
             return Ok(updatedContent);
@@ -252,6 +307,14 @@ public class ContentController : Controller
                 endTime: null,
                 genreList: updatedGenres
             );
+
+            // If content is updated, cache from that content becomes outdated, so it should be removed
+            var cacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", id.ToString() });
+            _cache.Remove(cacheKey);
+
+            // When any content is added, updated or deleted, the cache with all movies must be reset
+            var allMoviesCacheKey = CachingExtensions.GetCacheKey(new List<string> { "Movies", "All" });
+            _cache.Remove(allMoviesCacheKey);
 
             var updatedContent = await _manager.UpdateContent(id, updatedContentDto).ConfigureAwait(false);
 

@@ -19,6 +19,7 @@ public static class WebApplicationBuilderExtensions
             options.SerializerOptions.PropertyNamingPolicy = null;
         });
         serviceCollection.AddControllers();
+        serviceCollection.AddMemoryCache();
         serviceCollection
             .AddEndpointsApiExplorer();
 
