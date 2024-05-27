@@ -26,7 +26,7 @@ public class ContentController : Controller
     }
     
     [HttpGet]
-    public async Task<IActionResult> GetManyContents()
+    public async Task<IActionResult> GetManyContents(bool bypassCaching = false)
     {
         _logger.LogInformation($"[GET] {nameof(GetManyContents)}: " +
             $"Attempting to retrieve all movies.");
@@ -42,7 +42,7 @@ public class ContentController : Controller
 
                 var cacheEntryOptions = new MemoryCacheEntryOptions()
                     .SetAbsoluteExpiration(TimeSpan.FromMinutes(15));
-                _cache.Set(cacheKey, contents, cacheEntryOptions);
+                if (!bypassCaching) _cache.Set(cacheKey, contents, cacheEntryOptions);
             }
         }
         catch (Exception e)
@@ -63,7 +63,7 @@ public class ContentController : Controller
     }
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetContent(Guid id)
+    public async Task<IActionResult> GetContent(Guid id, bool bypassCaching = false)
     {
         _logger.LogInformation($"[GET] {nameof(GetContent)}: " +
             $"Attempting to retrive movie with ID {id}.");
@@ -79,7 +79,7 @@ public class ContentController : Controller
 
                 var cacheEntryOptions = new MemoryCacheEntryOptions()
                     .SetAbsoluteExpiration(TimeSpan.FromMinutes(15));
-                _cache.Set(cacheKey, content, cacheEntryOptions);
+                if (!bypassCaching) _cache.Set(cacheKey, content, cacheEntryOptions);
             }
         }
         catch (Exception e)
